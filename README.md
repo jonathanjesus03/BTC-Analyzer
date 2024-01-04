@@ -26,7 +26,7 @@ btcAnalyzer ofrece tres modos de exploración:
 
 * unconfirmed_transactions
 * inspect
-* address
+* address_inspect
 
 La primera opción permite listar las transacciones en tiempo real, permitiendo especificar el número total de transacciones a través del parámetro '-n':
 
@@ -46,7 +46,7 @@ Si deseas examinar una transacción en particular, proporciona su identificador 
 
 En la actualidad, las direcciones de entrada y salida se filtran en la primera página. Si una transacción involucra múltiples direcciones, a veces estas pueden encontrarse en otras páginas. Si alguien desea mejorar esta funcionalidad para capturar todas las direcciones, se puede realizar mediante un pull request.
 
-Para investigar las direcciones involucradas en una transacción, ya sea de entrada o salida, utiliza el modo 'address' con el parámetro '-a' seguido de la dirección que deseas explorar:
+Para investigar las direcciones involucradas en una transacción, ya sea de entrada o salida, utiliza el modo 'address_inspect' con el parámetro '-a' seguido de la dirección que deseas explorar:
 
 <p align="center">
 <img src="Images/fourth.png"
