@@ -1,0 +1,296 @@
+#!/bin/bash
+
+#Colours
+greenColour="\e[0;32m\033[1m"
+endColour="\033[0m\e[0m"
+redColour="\e[0;31m\033[1m"
+blueColour="\e[0;34m\033[1m"
+yellowColour="\e[0;33m\033[1m"
+purpleColour="\e[0;35m\033[1m"
+turquoiseColour="\e[0;36m\033[1m"
+grayColour="\e[0;37m\033[1m"
+
+trap ctrl_c INT
+
+function ctrl_c(){
+	echo -e "\n${redColour}[!] Exiting \n${endColour}"
+
+	rm ut.* money* amount.table entry_output entry.tmp output.tmp address.information bitcoin_to_dollar 2>/dev/null
+	tput cnorm; exit 1	
+	
+}
+
+function help_panel(){
+	echo -e "\n${redColour}[!] Uso: ./script_bitcoin${endColour}"
+	for i in $(seq 1 80); do echo -ne "${redColour}-"; done; echo -ne "${endColour}"
+	echo -e "\n\n\t${grayColour}[-e]${endColour}${yellowColour} Exploration mode${endColour}"
+	echo -e "\t\t${purpleColour}transactions:\t\t${yellowColour}list unconfirmed transactions"
+        echo -e "\t\t${purpleColour}inspect:\t\t${yellowColour}inspect a transaction hash"
+        echo -e "\t\t${purpleColour}transaction_addres:\t${yellowColour}inspect a transaction adress"
+	echo -e "\n\t${grayColour}[-n]${endColour}${yellowColour} limit number of transactions${endColour}${blueColour} (Ejemplo: -n 8)${endColour}"
+	echo -e "\n\t${grayColour}[-i]${endColour}${yellowColour} enter the transaction identifier${endColour}${blueColour} (Ejemplo: -i 94346a70c42d534e49fb4d1ddc2074befe56953b48c338b65298b9ebc2a5d4fc)${endColour}"
+	echo -e "\n\t${grayColour}[-a]${endColour}${yellowColour} inspect a transaction address${endColour}${blueColour} (Ejemplo: -a jiorkjaisojfnojsadmfkermfiqoj90r2j3rowjerklmlkcpzc123zxzxfsdplk0)${endColour}"
+	echo -e "\n\t${grayColour}[-h]${endColour}${yellowColour} Show help panel${endColour}"
+
+	tput cnorm; exit 1
+}
+
+transactions_unconfirmed="https://www.blockchain.com/es/explorer/mempool/btc/"
+transaction_inspect="https://live.blockcypher.com/btc/tx/"
+inspected_transaction_adress="https://live.blockcypher.com/btc/address/"
+
+
+function printTable(){
+
+    local -r delimiter="${1}"
+    local -r data="$(removeEmptyLines "${2}")"
+
+    if [[ "${delimiter}" != '' && "$(isEmptyString "${data}")" = 'false' ]]
+    then
+        local -r numberOfLines="$(wc -l <<< "${data}")"
+
+        if [[ "${numberOfLines}" -gt '0' ]]
+        then
+            local table=''
+            local i=1
+
+            for ((i = 1; i <= "${numberOfLines}"; i = i + 1))
+            do
+                local line=''
+                line="$(sed "${i}q;d" <<< "${data}")"
+
+                local numberOfColumns='0'
+                numberOfColumns="$(awk -F "${delimiter}" '{print NF}' <<< "${line}")"
+
+                if [[ "${i}" -eq '1' ]]
+                then
+                    table="${table}$(printf '%s#+' "$(repeatString '#+' "${numberOfColumns}")")"
+                fi
+
+                table="${table}\n"
+
+                local j=1
+
+                for ((j = 1; j <= "${numberOfColumns}"; j = j + 1))
+                do
+                    table="${table}$(printf '#| %s' "$(cut -d "${delimiter}" -f "${j}" <<< "${line}")")"
+                done
+
+                table="${table}#|\n"
+
+                if [[ "${i}" -eq '1' ]] || [[ "${numberOfLines}" -gt '1' && "${i}" -eq "${numberOfLines}" ]]
+                then
+                    table="${table}$(printf '%s#+' "$(repeatString '#+' "${numberOfColumns}")")"
+                fi
+            done
+
+            if [[ "$(isEmptyString "${table}")" = 'false' ]]
+            then
+                echo -e "${table}" | column -s '#' -t | awk '/^\+/{gsub(" ", "-", $0)}1'
+            fi
+        fi
+    fi
+}
+
+function removeEmptyLines(){
+
+    local -r content="${1}"
+    echo -e "${content}" | sed '/^\s*$/d'
+}
+
+function repeatString(){
+
+    local -r string="${1}"
+    local -r numberToRepeat="${2}"
+
+    if [[ "${string}" != '' && "${numberToRepeat}" =~ ^[1-9][0-9]*$ ]]
+    then
+        local -r result="$(printf "%${numberToRepeat}s")"
+        echo -e "${result// /${string}}"
+    fi
+}
+
+function isEmptyString(){
+
+    local -r string="${1}"
+
+    if [[ "$(trimString "${string}")" = '' ]]
+    then
+        echo 'true' && return 0
+    fi
+
+    echo 'false' && return 1
+}
+
+function trimString(){
+
+    local -r string="${1}"
+    sed 's,^[[:blank:]]*,,' <<< "${string}" | sed 's,[[:blank:]]*$,,'
+}
+
+
+
+function transactions(){
+	limit_number=$1
+		
+	echo '' > ut.origin.tmp
+	echo '' > ut.tmp
+	echo '' > ut.table
+	while [ "$(cat ut.origin.tmp | wc -l)" == "1" ]; do
+		curl -s $transactions_unconfirmed > ut.origin.tmp	
+	done
+	
+	hashes=$(cat ut.origin.tmp | grep -o -P '"/explorer/transactions/btc/\K[^"]+' | head -n $limit_number)
+	
+	for ut in $(cat ut.origin.tmp); do 
+		echo $ut 	
+	done > ut.tmp 
+		
+	echo "Hashes_Cantidad($)_Bitcoin_Tiempo" > ut.table
+	
+	for hash in $hashes; do 
+		echo "${hash}_$(cat ut.tmp | grep -m 1 "$hash" -A 37 | tail -n 1 | cut -d "<" -f 1 | cut -d ">" -f 2)_$(cat ut.tmp | grep -m 1 "$hash" -A 29 | tail -n 1 | cut -d ">" -f 2)_$(cat ut.tmp | grep -m 1 "$hash" -A 21 | tail -n 1 | cut -d "<" -f 1)" >> ut.table
+	done
+
+	cat ut.table | tr '_' ' ' | awk '{print $2}' | grep -v "Cantidad" | sed 's/\,.*//g' | tr -d '.' > money
+	
+	money=0 ; cat money | while read money_line ; do 
+		let money+=$money_line
+		echo $money > money.tmp
+	done 
+	
+	echo "Total Amount_\$$(printf "%'.d\n" $(cat money.tmp))" > amount.table 
+	
+	if [ '$(cat ut.table | wc -l)' != '1' ]; then
+		echo -ne ${yellowColour}
+		printTable '_' "$(cat ut.table)"
+		echo -ne ${endColour}
+		echo -ne ${redColour}
+		printTable '_' "$(cat amount.table)"
+		echo -ne ${endColour}
+		rm ut.* money* amount.table 2>/dev/null
+		tput cnorm
+	else
+		rm ut.* money* amount.table 2>/dev/null
+		echo "ERROR WEB"
+	fi
+	
+	rm ut.* money* amount.table 2>/dev/null
+	tput cnorm
+
+}
+
+function inspectIdentifier(){
+	transaction_identifier=$1
+	
+	echo "Entry quantity_Output quantity" > entry_output
+	
+	while [ "$(cat entry_output | wc -l)" == "1" ]; do 
+		curl -s "${transaction_inspect}${transaction_identifier}/" | html2text | grep -E "from|Amount Transacted" -A 1 | grep "BTC" | tr -d "from" | sed 's/BTC//' | xargs | awk '{sum=0; for(i=2; i<=NF; i++) sum+=$i; printf "%.8f %.8f\n", sum, $1}' | awk '{print $1, "BTC_"$2, "BTC"}' >> entry_output
+	done 
+	
+	echo -ne "${greenColour}" 
+	printTable "_" "$(cat entry_output)"
+	echo -ne "${endColour}" 
+	
+	rm entry_output 2>/dev/null
+	
+	echo "Identifier entries_Amount" > entry.tmp
+	
+	while [ "$(cat entry.tmp | wc -l)" == "1" ]; do
+		curl -s "${transaction_inspect}${transaction_identifier}/" | html2text | grep -E "Input|Inputs" -A 200 | grep -E "Output|Outputs" -B 200 | grep -v -E "Inputs|Outputs|Input|Output|\--" | awk 'NR%2{printf "%s ",$0;next;}1' | sed 's/from\|(\(output\))//g' | awk '{print $3"_"$1,$2}' >> entry.tmp 
+	done
+	
+	echo -ne "${blueColour}"
+	printTable "_" "$(cat entry.tmp)"
+	echo -ne "${endColour}"
+	
+	rm entry.tmp 2>/dev/null
+	
+	
+	echo "Identifier outputs_Amount" > output.tmp
+	
+	while [ "$(cat output.tmp | wc -l)" == "1" ]; do
+		curl -s "${transaction_inspect}${transaction_identifier}/" | html2text | grep -E "Outputs Created|Output Created" -A 200 | grep -E -m 1 "Estimated Value Sent|We are social" -B 200 | grep -v -E "Estimated Value Sent|We are social|Outputs|Output|\--" | awk 'NR%2{printf "%s ",$0;next;}1' | sed 's/to\|(\(spent\))\|(\(unspent\))//g' | awk '{print $3"_"$1,$2}' >> output.tmp
+	done
+	
+	echo -ne "${blueColour}"
+	printTable "_" "$(cat output.tmp)"
+	echo -ne "${endColour}"
+	
+	rm output.tmp 2> /dev/null
+	tput cnorm
+}
+
+function inspectAddress(){
+	transaction_address=$1
+	
+	echo "TRANSACTIONS_TOTAL AMOUNT RECEIVED (BTC)_TOTAL AMOUNT SENT (BTC)_CURRENT BALANCE (BTC)" > address.information
+	
+	while [ "$(cat address.information | wc -l)" == "1" ]; do
+		curl -s "${inspected_transaction_adress}${transaction_address}/" | html2text | grep -E "Received|\* Sent|Balance|API_Docs" -A 2 | grep -v -E "Received|Sent|Balance|API_Docs|\--" | tr -d "\n" | awk '{print $9"_"$1,$2"_"$3,$4"_"$5,$6}' | sed 's/\*//g' >> address.information
+	done
+	
+	number_transactions="$(curl -s "${inspected_transaction_adress}${transaction_address}/" |  html2text | grep -E "API_Docs" -A 2 | grep -v -E "Received" | sed 's/BTC//' | tail -n 1 | awk '{print $2}')"
+	
+	echo -ne "${purpleColour}"
+	printTable "_" "$(cat address.information | sed "s/^_/${number_transactions}_/")"	
+	echo -ne "${endColour}"
+	
+	rm address.information 2>/dev/null
+	
+	bitcoin_value="$(curl -s "https://www.coindesk.com/price/bitcoin/" | html2text | grep "The Bitcoin price is" | awk '{print $5}' | sed 's/\$//' | tr -d ',')"
+	
+	curl -s "${inspected_transaction_adress}${transaction_address}/" | html2text | grep -E "API_Docs" -A 2 | grep -v -E "Received" | sed 's/BTC//' | tail -n 1 | awk '{print $4}' | sed "s/^*.*/${number_transactions}/" > address.information 
+	
+	curl -s "${inspected_transaction_adress}${transaction_address}/" | html2text | grep -E "Received|\* Sent|Balance" -A 1 | grep -v -E "Received|Sent|Balance|\--" | tr -d " " | sed 's/,//g' > bitcoin_to_dollar
+	
+	cat bitcoin_to_dollar | while read line ; do
+		echo "\$$(printf "%'.d\n" $(echo "$(echo $line | sed 's/BTC//')"*$bitcoin_value | bc) 2>/dev/null)" >> address.information
+	done
+	
+	line_null=$(cat address.information | grep -n "^\$$" | awk '{print $1}' FS=":")
+	
+	if [ $line_null ]; then
+		sed "${line_null}s/\$/0.00/" -i address.information 
+	fi
+	
+	cat address.information | xargs | tr " " "_" > address.information2
+	rm address.information 2>/dev/null && mv address.information2 address.information
+	
+	sed '1iTransactions_Total Amount Received (USD)_Total Amount Sent (USD)_Current Balance (USD)' -i address.information
+	
+	echo -ne ${yellowColour}
+	printTable "_" "$(cat address.information)"
+	echo -ne ${endColour}
+	
+	rm address.information bitcoin_to_dollar 2>/dev/null
+	
+}
+	
+parameter_counter=0; while getopts "a:e:i:n:h:" arg; do
+	case $arg in
+	e) exploration_mode=$OPTARG; let parameter_counter+=1;;
+	i) transaction_identifier=$OPTARG; let parameter_counter+=1;;
+	n) limit_number=$OPTARG; let parameter_counter+=1;;
+	a) transaction_address=$OPTARG; let parameter_counter+=1;;
+	h) help_panel;;
+	esac
+done
+
+if [ $parameter_counter -eq 0 ]; then
+	help_panel
+else
+	if [ "$(echo $exploration_mode)" == "transactions" ]; then
+		if [ -z "$limit_number" ]; then 
+		limit_number=100
+		transactions $limit_number
+		else
+		transactions $limit_number
+		fi
+	elif [ "$(echo $exploration_mode)" == "inspect" ]; then
+		inspectIdentifier $transaction_identifier
+	elif [ "$(echo $exploration_mode)" == "address_inspect" ]; then
+		inspectAddress $transaction_address
+	fi
+fi
