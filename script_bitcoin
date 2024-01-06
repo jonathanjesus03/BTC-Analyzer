@@ -237,10 +237,14 @@ function inspectAddress(){
 	echo "TRANSACTIONS_TOTAL AMOUNT RECEIVED (BTC)_TOTAL AMOUNT SENT (BTC)_CURRENT BALANCE (BTC)" > address.information
 	
 	while [ "$(cat address.information | wc -l)" == "1" ]; do
-		curl -s "${inspected_transaction_adress}${transaction_address}/" | html2text | grep -E "Received|\* Sent|Balance|API_Docs" -A 2 | grep -v -E "Received|Sent|Balance|API_Docs|\--" | grep -v 'BTC unconfirmed' | tr -d "\n" | awk '{print $9"_"$1,$2"_"$3,$4"_"$5,$6}' | sed 's/\*//g' >> address.information
+		curl -s "${inspected_transaction_adress}${transaction_address}/" | html2text | grep -E "Received|\* Sent|Balance|API_Docs" -A 2 | grep -v -E "Received|Sent|Balance|API_Docs|\--" | grep -v 'BTC unconfirmed' | tr -d "\n" | awk '{print $9"_"$1,$2"_"$3,$4"_"$5,$6}' | sed 's/\*//g' | sed 's/No//' >> address.information
 	done
 	
 	number_transactions="$(curl -s "${inspected_transaction_adress}${transaction_address}/" |  html2text | grep -E "API_Docs" -A 2 | grep -v -E "Received" | sed 's/BTC//' | tail -n 1 | awk '{print $2}')"
+	
+	if [ "$(echo $number_transactions)" == "transactions" ]; then
+		number_transactions="no transactions made"
+	fi
 	
 	echo -ne "${yellowColour}"
 	printTable "_" "$(cat address.information | sed "s/^_/${number_transactions}_/")"	
@@ -262,7 +266,8 @@ function inspectAddress(){
 		sed "${line_null}s/\$/0.00/" -i address.information 
 	fi
 	
-	cat address.information | xargs | tr " " "_" > address.information2
+	cat address.information | xargs | tr " " "_" | sed 's/^\$/no transactions made_\$/'> address.information2
+	sleep 10
 	rm address.information 2>/dev/null && mv address.information2 address.information
 	
 	sed '1iTRANSACTIONS_TOTAL AMOUNT RECEIVED (USD)_TOTAL AMOUNT SENT (USD)_CURRENT BALANCE (USD)' -i address.information
