@@ -10,6 +10,7 @@ Antes de ejecutar la herramienta, asegúrate de instalar las siguientes utilidad
 
 ```bash
 apt install html2text bc -y
+chmod +x script_bitcoin
 ```
 Una vez que hayas completado la instalación, podrás avanzar al siguiente paso.
 
