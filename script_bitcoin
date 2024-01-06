@@ -15,7 +15,8 @@ trap ctrl_c INT
 function ctrl_c(){
 	echo -e "\n${redColour}[!] Exiting \n${endColour}"
 
-	rm ut.* money* amount.table entry_output entry.tmp output.tmp address.information bitcoin_to_dollar 2>/dev/null
+	rm ut.* money* amount.table entry_output entry.tmp output.tmp address.information bitcoin_to_dollar bitcoin_value 2>/dev/null
+	
 	tput cnorm; exit 1	
 	
 }
@@ -38,6 +39,7 @@ function help_panel(){
 transactions_unconfirmed="https://www.blockchain.com/es/explorer/mempool/btc/"
 transaction_inspect="https://live.blockcypher.com/btc/tx/"
 inspected_transaction_adress="https://live.blockcypher.com/btc/address/"
+bitcoin_value="$(curl -s "https://www.coindesk.com/price/bitcoin/" | html2text | grep "The Bitcoin price is" | awk '{print $5}' | sed 's/\$//' | tr -d ',')"
 
 
 function printTable(){
@@ -149,10 +151,10 @@ function transactions(){
 	echo "Hashes_Cantidad($)_Bitcoin_Tiempo" > ut.table
 	
 	for hash in $hashes; do 
-		echo "${hash}_$(cat ut.tmp | grep -m 1 "$hash" -A 37 | tail -n 1 | cut -d "<" -f 1 | cut -d ">" -f 2)_$(cat ut.tmp | grep -m 1 "$hash" -A 29 | tail -n 1 | cut -d ">" -f 2)_$(cat ut.tmp | grep -m 1 "$hash" -A 21 | tail -n 1 | cut -d "<" -f 1)" >> ut.table
+		echo "${hash}_\$$(printf "%'.2f\n" "$(cat ut.tmp | grep -m 1 "$hash" -A 37 | tail -n 1 | cut -d "<" -f 1 | cut -d ">" -f 2 | tr -d '.' | sed 's/,/./')")_$(cat ut.tmp | grep -m 1 "$hash" -A 29 | tail -n 1 | cut -d ">" -f 2)_$(cat ut.tmp | grep -m 1 "$hash" -A 21 | tail -n 1 | cut -d "<" -f 1)" >> ut.table
 	done
-
-	cat ut.table | tr '_' ' ' | awk '{print $2}' | grep -v "Cantidad" | sed 's/\,.*//g' | tr -d '.' > money
+	
+	cat ut.table | tr '_' ' ' | awk '{print $2}' | grep -v "Cantidad" | sed 's/\..*//g' | tr -d ',' | tr -d '$'> money
 	
 	money=0 ; cat money | while read money_line ; do 
 		let money+=$money_line
@@ -175,7 +177,14 @@ function transactions(){
 		echo "ERROR WEB"
 	fi
 	
-	rm ut.* money* amount.table 2>/dev/null
+	echo -e "BITCOIN VALUE_\$"$(printf "%'.2f\n" ${bitcoin_value})"" > bitcoin_value
+	
+	echo -ne ${redColour}
+	printTable "_" "$(cat bitcoin_value)" 
+	echo -ne ${endColour}
+	
+	
+	rm ut.* money* amount.table bitcoin_value 2>/dev/null
 	tput cnorm
 
 }
@@ -183,7 +192,7 @@ function transactions(){
 function inspectIdentifier(){
 	transaction_identifier=$1
 	
-	echo "Entry quantity_Output quantity" > entry_output
+	echo "Entry Quantity_Output Quantity" > entry_output
 	
 	while [ "$(cat entry_output | wc -l)" == "1" ]; do 
 		curl -s "${transaction_inspect}${transaction_identifier}/" | html2text | grep -E "from|Amount Transacted" -A 1 | grep "BTC" | tr -d "from" | sed 's/BTC//' | xargs | awk '{sum=0; for(i=2; i<=NF; i++) sum+=$i; printf "%.8f %.8f\n", sum, $1}' | awk '{print $1, "BTC_"$2, "BTC"}' >> entry_output
@@ -195,10 +204,10 @@ function inspectIdentifier(){
 	
 	rm entry_output 2>/dev/null
 	
-	echo "Identifier entries_Amount" > entry.tmp
+	echo "Identifier Entries_Amount" > entry.tmp
 	
 	while [ "$(cat entry.tmp | wc -l)" == "1" ]; do
-		curl -s "${transaction_inspect}${transaction_identifier}/" | html2text | grep -E "Input|Inputs" -A 200 | grep -E "Output|Outputs" -B 200 | grep -v -E "Inputs|Outputs|Input|Output|\--" | awk 'NR%2{printf "%s ",$0;next;}1' | sed 's/from\|(\(output\))//g' | awk '{print $3"_"$1,$2}' >> entry.tmp 
+		curl -s "${transaction_inspect}${transaction_identifier}/" | html2text | grep -E "Input|Inputs" -A 200 | grep -E "Output|Outputs" -B 200 | grep -v -E "Inputs|Outputs|Input|Output|\--" | grep -v "Null_Data_Transaction" | awk 'NR%2{printf "%s ",$0;next;}1' | sed 's/from\|(\(output\))//g' | awk '{print $3"_"$1,$2}' >> entry.tmp 
 	done
 	
 	echo -ne "${blueColour}"
@@ -208,10 +217,10 @@ function inspectIdentifier(){
 	rm entry.tmp 2>/dev/null
 	
 	
-	echo "Identifier outputs_Amount" > output.tmp
+	echo "Identifier Outputs_Amount" > output.tmp
 	
 	while [ "$(cat output.tmp | wc -l)" == "1" ]; do
-		curl -s "${transaction_inspect}${transaction_identifier}/" | html2text | grep -E "Outputs Created|Output Created" -A 200 | grep -E -m 1 "Estimated Value Sent|We are social" -B 200 | grep -v -E "Estimated Value Sent|We are social|Outputs|Output|\--" | awk 'NR%2{printf "%s ",$0;next;}1' | sed 's/to\|(\(spent\))\|(\(unspent\))//g' | awk '{print $3"_"$1,$2}' >> output.tmp
+		curl -s "${transaction_inspect}${transaction_identifier}/" | html2text | grep -E "Outputs Created|Output Created" -A 200 | grep -E -m 1 "Estimated Value Sent|We are social" -B 200 | grep -v -E "Estimated Value Sent|We are social|Outputs|Output|\--" | grep -v "Null_Data_Transaction" | awk 'NR%2{printf "%s ",$0;next;}1' | sed 's/to\|(\(spent\))\|(\(unspent\))//g' | awk '{print $3"_"$1,$2}' >> output.tmp
 	done
 	
 	echo -ne "${blueColour}"
@@ -228,25 +237,23 @@ function inspectAddress(){
 	echo "TRANSACTIONS_TOTAL AMOUNT RECEIVED (BTC)_TOTAL AMOUNT SENT (BTC)_CURRENT BALANCE (BTC)" > address.information
 	
 	while [ "$(cat address.information | wc -l)" == "1" ]; do
-		curl -s "${inspected_transaction_adress}${transaction_address}/" | html2text | grep -E "Received|\* Sent|Balance|API_Docs" -A 2 | grep -v -E "Received|Sent|Balance|API_Docs|\--" | tr -d "\n" | awk '{print $9"_"$1,$2"_"$3,$4"_"$5,$6}' | sed 's/\*//g' >> address.information
+		curl -s "${inspected_transaction_adress}${transaction_address}/" | html2text | grep -E "Received|\* Sent|Balance|API_Docs" -A 2 | grep -v -E "Received|Sent|Balance|API_Docs|\--" | grep -v 'BTC unconfirmed' | tr -d "\n" | awk '{print $9"_"$1,$2"_"$3,$4"_"$5,$6}' | sed 's/\*//g' >> address.information
 	done
 	
 	number_transactions="$(curl -s "${inspected_transaction_adress}${transaction_address}/" |  html2text | grep -E "API_Docs" -A 2 | grep -v -E "Received" | sed 's/BTC//' | tail -n 1 | awk '{print $2}')"
 	
-	echo -ne "${purpleColour}"
+	echo -ne "${yellowColour}"
 	printTable "_" "$(cat address.information | sed "s/^_/${number_transactions}_/")"	
 	echo -ne "${endColour}"
 	
 	rm address.information 2>/dev/null
-	
-	bitcoin_value="$(curl -s "https://www.coindesk.com/price/bitcoin/" | html2text | grep "The Bitcoin price is" | awk '{print $5}' | sed 's/\$//' | tr -d ',')"
 	
 	curl -s "${inspected_transaction_adress}${transaction_address}/" | html2text | grep -E "API_Docs" -A 2 | grep -v -E "Received" | sed 's/BTC//' | tail -n 1 | awk '{print $4}' | sed "s/^*.*/${number_transactions}/" > address.information 
 	
 	curl -s "${inspected_transaction_adress}${transaction_address}/" | html2text | grep -E "Received|\* Sent|Balance" -A 1 | grep -v -E "Received|Sent|Balance|\--" | tr -d " " | sed 's/,//g' > bitcoin_to_dollar
 	
 	cat bitcoin_to_dollar | while read line ; do
-		echo "\$$(printf "%'.d\n" $(echo "$(echo $line | sed 's/BTC//')"*$bitcoin_value | bc) 2>/dev/null)" >> address.information
+		echo "\$$(printf "%'.2f\n" $(echo "$(echo $line | sed 's/BTC//')"*$bitcoin_value | bc) 2>/dev/null)" >> address.information
 	done
 	
 	line_null=$(cat address.information | grep -n "^\$$" | awk '{print $1}' FS=":")
@@ -258,13 +265,19 @@ function inspectAddress(){
 	cat address.information | xargs | tr " " "_" > address.information2
 	rm address.information 2>/dev/null && mv address.information2 address.information
 	
-	sed '1iTransactions_Total Amount Received (USD)_Total Amount Sent (USD)_Current Balance (USD)' -i address.information
+	sed '1iTRANSACTIONS_TOTAL AMOUNT RECEIVED (USD)_TOTAL AMOUNT SENT (USD)_CURRENT BALANCE (USD)' -i address.information
 	
-	echo -ne ${yellowColour}
+	echo -ne ${grayColour}
 	printTable "_" "$(cat address.information)"
 	echo -ne ${endColour}
 	
-	rm address.information bitcoin_to_dollar 2>/dev/null
+	echo -e "BITCOIN VALUE_\$"$(printf "%'.2f\n" ${bitcoin_value})"" > bitcoin_value
+	
+	echo -ne ${yellowColour}
+	printTable "_" "$(cat bitcoin_value)" 
+	echo -ne ${endColour}
+	
+	rm address.information bitcoin_to_dollar bitcoin_value 2>/dev/null
 	
 }
 	
@@ -288,9 +301,22 @@ else
 		else
 		transactions $limit_number
 		fi
+
 	elif [ "$(echo $exploration_mode)" == "inspect" ]; then
-		inspectIdentifier $transaction_identifier
+		if [ -z $transaction_identifier ]; then
+			help_panel
+		else		
+			inspectIdentifier $transaction_identifier
+		fi
+		
 	elif [ "$(echo $exploration_mode)" == "address_inspect" ]; then
+		if [ -z $transaction_address ]; then 
+		help_panel
+		else
 		inspectAddress $transaction_address
+		fi
+		
+	else
+		help_panel
 	fi
 fi
